@@ -9,7 +9,7 @@ import shlex
 HERE = Path(__file__).resolve().parent
 
 
-def command(config, variant, rank, *, benchmark=False, validate_files=False):
+def _render(config, variant, rank, *, benchmark, validate_files, require_qualification):
     if variant not in {p.stem for p in (HERE/'profiles').glob('*.json')}:
         raise ValueError('Unknown launcher profile')
     if len(config['ranks']) != 3 or config['ranks'][rank].get('rank') != rank:
@@ -108,7 +108,7 @@ def command(config, variant, rank, *, benchmark=False, validate_files=False):
         address = ipaddress.ip_address(config['master_address'])
         if any(address in ipaddress.ip_network(cidr) for cidr in ['192.0.2.0/24', '198.51.100.0/24', '203.0.113.0/24']):
             raise ValueError('Replace the documentation example address with your actual head address')
-        if not profile['qualified_pool'] and not profile.get('serving_smoke_qualified'):
+        if require_qualification and not profile['qualified_pool'] and not profile.get('serving_smoke_qualified'):
             raise ValueError('This profile has neither recorded pool nor serving smoke qualification')
         for path in [Path(argv[0]), model / 'config.json', model / 'vision.safetensors', cache,
                      kit / 'aot/aot.json', kit / 'engram-token-map.json',
@@ -148,6 +148,16 @@ def command(config, variant, rank, *, benchmark=False, validate_files=False):
         elif not list(cache.glob('rank' + str(rank) + '*.bin')):
             raise FileNotFoundError('No exported binary for rank ' + str(rank) + ' in ' + str(cache))
     return argv, env
+
+
+def command(config, variant, rank, *, benchmark=False, validate_files=False):
+    return _render(config, variant, rank, benchmark=benchmark, validate_files=validate_files,
+                  require_qualification=True)
+
+
+def qualification_command(config, variant, rank, *, validate_files=True):
+    return _render(config, variant, rank, benchmark=True, validate_files=validate_files,
+                  require_qualification=False)
 
 
 def main():

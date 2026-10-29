@@ -18,8 +18,8 @@ def build(build_root,out,name,zig='zig',prepare_only=False):
     out.mkdir(parents=True,exist_ok=False)
     commands=[[zig,'build','test','-j2','--summary','all']]
     modules=[('core/lanes/adaptive.zig',False),('core/lanes/refresh_budget.zig',False),('families/dsv41/sampling.zig',True),('families/dsv41/penalty_pool.zig',True)]
-    if name=='v126':
-        modules += [('families/dsv41/kv_pressure.zig',False),('families/dsv41/kv_move_budget.zig',False)]
+    if name in ('v126', 'v126-resumable'):
+        modules += [('families/dsv41/kv_pressure.zig',True),('families/dsv41/kv_move_budget.zig',False)]
     for module,libc in modules:
         path='zig/src/'+module
         if (source/path).exists():commands.append([zig,'test',path,'-O','ReleaseSafe']+(['-lc'] if libc else []))
