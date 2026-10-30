@@ -85,6 +85,10 @@ It adds two bounds that the GLM vLLM service already has:
   or completion returns it to spinning. The first gather after an idle spell
   waits at most one nap. `TF_RDMA_IDLE_S=0` restores the old behavior.
 
+The profile also serves the model's full 1,048,576-token context
+(`max_position_embeddings`) rather than the stock 401,408. The 7M-token pool
+already holds it. No recipe has been qualified above 401,408 tokens.
+
 Both switches use environment variables only, so one binary can run on and off
 arms without a rebuild. The cap value is not sized from a memory measurement.
 TP2 reference patch 0033 measured identical replies at a cap of 3 and flat

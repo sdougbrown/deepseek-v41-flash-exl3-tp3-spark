@@ -13,7 +13,7 @@
   "engram_marker": "SOURCE.json",
   "routed_expert_bpw": 3.510072157,
   "pool_tokens": 7000000,
-  "context_tokens": 401408,
+  "context_tokens": 1048576,
   "parallel": 12,
   "round_rows": 48,
   "prompt_snapshot_gib_head": 3,
