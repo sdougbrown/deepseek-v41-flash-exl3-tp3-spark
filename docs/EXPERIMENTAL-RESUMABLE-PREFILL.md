@@ -32,6 +32,35 @@ python3 -m tensorfold.launch --config tensorfold/cluster.local.json --variant 1.
 python3 -m tensorfold.launch --config tensorfold/cluster.local.json --variant 1.2.6-resumable --rank 2
 ```
 
+## Graph-cache ownership candidate
+
+If a graph's first launch fails after cache insertion, the cache must still own
+its executable. Recipe `v126-resumable-graph-owner` adds this correction to
+`v126-resumable`; profile `1.2.6-resumable-graph-owner` selects the isolated
+`bin-1.2.6-resumable-graph-owner` directory. Stock and earlier experimental
+recipes, profiles and binary directories remain preserved.
+
+In both round and draft caches, local executable cleanup is scoped to
+instantiation and fallible cache insertion. Successful insertion publishes the
+executable to the cache, which owns it even if the first launch then fails.
+This changes no GPU work, execution order or retry policy. It adds neither a
+graph-count cap nor a distributed-failure protocol.
+
+The CPU probe uses the real cache declarations and CUDA wrappers with a mocked
+driver and no-op capture bodies. Its eight cases cover retry validity, single
+destruction after a failed first launch, out-of-memory errors during insertion,
+and instantiation failure for both caches. See [recipe and build instructions](RECIPES.md) to materialize
+this recipe, then run against that materialized source (no GPU execution):
+
+```sh
+python3 tools/ci/graph_ownership.py --source /srv/ds41f-build-graph-owner/source/zig/src
+```
+
+GPU qualification remains pending; the public `--run` guard remains closed.
+Earlier scheduler smoke results do not qualify this candidate. No GPU soak or
+performance result is claimed here, nor a fix for host poweroff or a lost CUDA
+context. See the [qualification checklist below](#qualification-still-required).
+
 ## Semantics and Tradeoffs
 
 - **Caller Visibility:** The intended response format is unchanged. The newcomer emits no token until its prefill completes; incumbents can continue meanwhile. Numerical equivalence still needs GPU qualification.

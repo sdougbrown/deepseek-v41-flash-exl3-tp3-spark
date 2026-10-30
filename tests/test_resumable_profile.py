@@ -144,6 +144,32 @@ class ResumableProfile(unittest.TestCase):
         self.assertTrue((dest / 'BUILD.json').is_file())
         self.assertFalse((root / stock_profile['binary_subdir']).exists())
 
+    def test_graph_owner_receipt_installs_isolated_and_preserves_resumable_install(self):
+        root = scratch('ds41f-126r-owner-install-')
+        selector = '1.2.6-resumable-graph-owner'
+        old_built = root / 'old-built'
+        old_built.mkdir()
+        synthetic_receipt(old_built, 'v126-resumable')
+        old_result = build.install(old_built, root, EXPERIMENTAL)
+        old_dest = Path(old_result['installed'])
+        old_files = {p.name: p.read_bytes() for p in old_dest.iterdir()}
+        new_dest = root / profile(selector)['binary_subdir']
+        with self.assertRaises(ValueError):
+            build.install(old_built, root, selector)
+        self.assertFalse(new_dest.exists())
+        new_built = root / 'new-built'
+        new_built.mkdir()
+        synthetic_receipt(new_built, 'v126-resumable-graph-owner')
+        result = build.install(new_built, root, selector)
+        self.assertEqual(Path(result['installed']), new_dest)
+        self.assertEqual(result['services_touched'], False)
+        self.assertEqual(result['recipe'], 'v126-resumable-graph-owner')
+        for name in ['tensorfold-native', 'tf-dsv41-lanes', 'BUILD.json']:
+            self.assertEqual((new_dest / name).read_bytes(), (new_built / name).read_bytes())
+        self.assertEqual({p.name: p.read_bytes() for p in old_dest.iterdir()}, old_files)
+        self.assertEqual({p.name for p in root.iterdir() if p.name.startswith('bin-')},
+                         {old_dest.name, new_dest.name})
+
 
 if __name__ == '__main__':
     unittest.main()
