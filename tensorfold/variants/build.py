@@ -19,7 +19,7 @@ def build(build_root,out,name,zig='zig',prepare_only=False):
     out.mkdir(parents=True,exist_ok=False)
     commands=[[zig,'build','test','-j2','--summary','all']]
     modules=[('core/lanes/adaptive.zig',False),('core/lanes/refresh_budget.zig',False),('families/dsv41/sampling.zig',True),('families/dsv41/penalty_pool.zig',True)]
-    if name in ('v126', 'v126-resumable', 'v126-resumable-graph-owner', 'v126-resumable-graph-cap'):
+    if name.startswith('v126'):
         modules += [('families/dsv41/kv_pressure.zig',True),('families/dsv41/kv_move_budget.zig',False)]
     for module,libc in modules:
         path='zig/src/'+module
