@@ -2,7 +2,7 @@ fn retryAfterFailure(comptime T: type) !void {
     state = .{ .fail_launches = 1 };
     const d = driver();
     const e: Engine = .{ .s = .{ .d = &d, .handle = @ptrFromInt(1) } };
-    var g = T.init(probe_allocator);
+    var g = make(T, probe_allocator, 0);
     defer g.deinit();
     try std.testing.expectError(error.CudaFailed, call(T, &g, &e));
     try call(T, &g, &e);
@@ -12,7 +12,7 @@ fn teardownAfterFailure(comptime T: type) !void {
     state = .{ .fail_launches = 1 };
     const d = driver();
     const e: Engine = .{ .s = .{ .d = &d, .handle = @ptrFromInt(1) } };
-    var g = T.init(probe_allocator);
+    var g = make(T, probe_allocator, 0);
     try std.testing.expectError(error.CudaFailed, call(T, &g, &e));
     g.deinit();
     try std.testing.expectEqual(@as(usize, 1), state.destroy_calls);
@@ -23,7 +23,7 @@ fn insertionFailure(comptime T: type) !void {
     var failing = std.testing.FailingAllocator.init(probe_allocator, .{ .fail_index = 0 });
     const d = driver();
     const e: Engine = .{ .s = .{ .d = &d, .handle = @ptrFromInt(1) } };
-    var g = T.init(failing.allocator());
+    var g = make(T, failing.allocator(), 0);
     defer g.deinit();
     try std.testing.expectError(error.OutOfMemory, call(T, &g, &e));
     try std.testing.expectEqual(@as(usize, 0), g.count());
@@ -34,11 +34,43 @@ fn instantiateFailure(comptime T: type) !void {
     state = .{ .fail_instantiate = true };
     const d = driver();
     const e: Engine = .{ .s = .{ .d = &d, .handle = @ptrFromInt(1) } };
-    var g = T.init(probe_allocator);
+    var g = make(T, probe_allocator, 0);
     defer g.deinit();
     try std.testing.expectError(error.CudaFailed, call(T, &g, &e));
     try std.testing.expectEqual(@as(usize, 0), g.count());
     try std.testing.expectEqual(@as(usize, 0), state.destroy_calls);
+}
+
+fn evictionDestroysOnce() !void {
+    state = .{};
+    const d = driver();
+    const e: Engine = .{ .s = .{ .d = &d, .handle = @ptrFromInt(1) } };
+    var g = make(Graphs, probe_allocator, 1);
+    try callRoundAt(&g, &e, 0);
+    try callRoundAt(&g, &e, 1); // evicts stretch 0
+    try std.testing.expectEqual(@as(usize, 1), g.count());
+    try std.testing.expectEqual(@as(usize, 1), state.destroy_calls);
+    try callRoundAt(&g, &e, 0); // captured again, evicts stretch 1
+    try callRoundAt(&g, &e, 0); // replayed
+    g.deinit();
+    try std.testing.expectEqual(@as(usize, 3), state.destroy_calls);
+    try std.testing.expectEqual(@as(usize, 0), state.double_destroys);
+    try std.testing.expectEqual(@as(usize, 0), state.stale_launches);
+    try std.testing.expectEqual(@as(usize, 4), state.launches);
+}
+fn evictionThenFailedLaunch() !void {
+    state = .{};
+    const d = driver();
+    const e: Engine = .{ .s = .{ .d = &d, .handle = @ptrFromInt(1) } };
+    var g = make(Graphs, probe_allocator, 1);
+    try callRoundAt(&g, &e, 0);
+    state.fail_launches = 1;
+    try std.testing.expectError(error.CudaFailed, callRoundAt(&g, &e, 1));
+    try callRoundAt(&g, &e, 1);
+    g.deinit();
+    try std.testing.expectEqual(@as(usize, 2), state.destroy_calls);
+    try std.testing.expectEqual(@as(usize, 0), state.double_destroys);
+    try std.testing.expectEqual(@as(usize, 0), state.stale_launches);
 }
 
 fn case0() !void { try retryAfterFailure(Graphs); }
@@ -49,6 +81,8 @@ fn case4() !void { try insertionFailure(Graphs); }
 fn case5() !void { try insertionFailure(PassGraphs); }
 fn case6() !void { try instantiateFailure(Graphs); }
 fn case7() !void { try instantiateFailure(PassGraphs); }
+fn case8() !void { try evictionDestroysOnce(); }
+fn case9() !void { try evictionThenFailedLaunch(); }
 
 var probe_allocator: std.mem.Allocator = undefined;
 pub fn main() !void {
@@ -65,7 +99,10 @@ pub fn main() !void {
         .{ .name = "drafter: failed cache allocation still frees the unowned executable", .run = case5 },
         .{ .name = "round: failed instantiate creates no cached executable", .run = case6 },
         .{ .name = "drafter: failed instantiate creates no cached executable", .run = case7 },
-    };
+    } ++ (if (capped) [_]Case{
+        .{ .name = "round: an evicted graph is destroyed once and never launched again", .run = case8 },
+        .{ .name = "round: a failed first launch after an eviction leaves a valid graph to retry", .run = case9 },
+    } else [_]Case{});
     var failures: usize = 0;
     for (cases) |case| {
         case.run() catch |err| {
