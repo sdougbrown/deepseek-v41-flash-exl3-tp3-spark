@@ -61,6 +61,47 @@ Earlier scheduler smoke results do not qualify this candidate. No GPU soak or
 performance result is claimed here, nor a fix for host poweroff or a lost CUDA
 context. See the [qualification checklist below](#qualification-still-required).
 
+## Bounded graph cache and idle RDMA nap candidate
+
+Recipe `v126-resumable-graph-cap` builds on `v126-resumable-graph-owner`;
+profile `1.2.6-resumable-graph-cap` selects `bin-1.2.6-resumable-graph-cap`.
+It adds two bounds that the GLM vLLM service already has:
+
+- **Graph cache cap.** vLLM captures a fixed list of batch sizes at startup.
+  The native round cache instead keeps every (rows, context bucket, stretch)
+  it ever meets: up to 48 rows × 3 stretches per bucket, and a new bucket at
+  every power of two of conversation length. `TF_DS_GRAPH_CAP=N` keeps at most
+  N round graphs and destroys the least recently replayed one past the cap.
+  A destroyed stretch is captured again when its key returns. Every rank reads
+  the same variable and sees the same keys in the same order, so all ranks keep
+  and drop the same graphs. The profile sets 256; 0 or unset keeps every graph.
+  The drafter cache is unchanged, because `--parallel` and the draft block
+  bound its keys. The head log reports the count at 64, 128 and 256 graphs,
+  and then at each power of two of evictions.
+- **Idle RDMA nap.** The ring's proxy thread polls its completion queues
+  without pause, which costs one CPU core per rank at idle. After
+  `TF_RDMA_IDLE_S` (default 2) seconds with nothing posted or reaped, it sleeps
+  `TF_RDMA_NAP_US` (default 100) microseconds between polls. The next doorbell
+  or completion returns it to spinning. The first gather after an idle spell
+  waits at most one nap. `TF_RDMA_IDLE_S=0` restores the old behavior.
+
+Both switches use environment variables only, so one binary can run on and off
+arms without a rebuild. The cap value is not sized from a memory measurement.
+TP2 reference patch 0033 measured identical replies at a cap of 3 and flat
+follower RSS at 128. Its configuration (C4, R16, 2M) differs from ours (C12,
+R48, 7M).
+
+The ownership probe also runs with `--capped`. Two more cases then check that
+an evicted graph is destroyed once and never launched again, and that a failed
+first launch after an eviction leaves a valid cached graph to retry.
+
+```sh
+python3 tools/ci/graph_ownership.py --capped --source /srv/ds41f-build-graph-cap/source/zig/src
+```
+
+GPU qualification remains pending. Track graph count, process RSS and
+`MemAvailable` separately from snapshot-store bytes during any trial.
+
 ## Semantics and Tradeoffs
 
 - **Caller Visibility:** The intended response format is unchanged. The newcomer emits no token until its prefill completes; incumbents can continue meanwhile. Numerical equivalence still needs GPU qualification.
