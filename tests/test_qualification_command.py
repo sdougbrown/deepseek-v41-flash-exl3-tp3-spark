@@ -73,6 +73,17 @@ class QualificationCommand(unittest.TestCase):
             with self.assertRaises(ValueError):
                 launch.command(config, EXPERIMENTAL, rank, validate_files=True)
 
+    def test_experimental_command_serves_on_api_host_and_still_validates_files(self):
+        root = scratch('ds41f-126r-experimental-')
+        config, _ = installed(root)
+        config['api_host'] = '0.0.0.0'
+        for rank in range(3):
+            with self.assertRaises(FileNotFoundError):
+                launch.command(config, EXPERIMENTAL, rank, validate_files=True, experimental=True)
+        head_argv, _ = launch.command(config, EXPERIMENTAL, 0, experimental=True)
+        self.assertEqual(head_argv[head_argv.index('--host') + 1], '0.0.0.0')
+        self.assertNotIn('--benchmark-control', head_argv)
+
     def test_qualification_command_reaches_missing_file_validation(self):
         root = scratch('ds41f-126r-qual-files-')
         config, _ = installed(root)

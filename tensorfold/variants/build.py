@@ -19,13 +19,13 @@ def build(build_root,out,name,zig='zig',prepare_only=False):
     out.mkdir(parents=True,exist_ok=False)
     commands=[[zig,'build','test','-j2','--summary','all']]
     modules=[('core/lanes/adaptive.zig',False),('core/lanes/refresh_budget.zig',False),('families/dsv41/sampling.zig',True),('families/dsv41/penalty_pool.zig',True)]
-    if name in ('v126', 'v126-resumable', 'v126-resumable-graph-owner'):
+    if name in ('v126', 'v126-resumable', 'v126-resumable-graph-owner', 'v126-resumable-graph-cap'):
         modules += [('families/dsv41/kv_pressure.zig',True),('families/dsv41/kv_move_budget.zig',False)]
     for module,libc in modules:
         path='zig/src/'+module
         if (source/path).exists():commands.append([zig,'test',path,'-O','ReleaseSafe']+(['-lc'] if libc else []))
     if 'graph-cache-ownership' in spec['components']:
-        commands.append([sys.executable,str(Path(__file__).resolve().parents[2]/'tools/ci/graph_ownership.py'),'--source',str(source/'zig/src'),'--zig',zig])
+        commands.append([sys.executable,str(Path(__file__).resolve().parents[2]/'tools/ci/graph_ownership.py'),'--source',str(source/'zig/src'),'--zig',zig]+(['--capped'] if 'graph-cache-cap' in spec['components'] else []))
     commands.append([zig,'build','native','dsv41-tools','-j2','-Dtarget=aarch64-linux-gnu','-Dfatbins='+str((build_root/'kit/build-fatbins').resolve()),'--prefix',str(out.resolve()),'--summary','all'])
     logs=[]
     for i,command in enumerate(commands,1):

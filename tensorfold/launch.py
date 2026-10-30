@@ -150,9 +150,10 @@ def _render(config, variant, rank, *, benchmark, validate_files, require_qualifi
     return argv, env
 
 
-def command(config, variant, rank, *, benchmark=False, validate_files=False):
+def command(config, variant, rank, *, benchmark=False, validate_files=False, experimental=False):
+    """experimental: serve a profile without recorded qualification (the operator's explicit choice)."""
     return _render(config, variant, rank, benchmark=benchmark, validate_files=validate_files,
-                  require_qualification=True)
+                  require_qualification=not experimental)
 
 
 def qualification_command(config, variant, rank, *, validate_files=True):
@@ -167,9 +168,11 @@ def main():
     parser.add_argument('--rank', choices=range(3), type=int, required=True)
     parser.add_argument('--benchmark', action='store_true')
     parser.add_argument('--run', action='store_true')
+    parser.add_argument('--experimental', action='store_true',
+                        help='allow a profile without recorded qualification; every file and receipt check still applies')
     args = parser.parse_args()
     argv, env = command(json.loads(args.config.read_text()), args.variant, args.rank,
-                        benchmark=args.benchmark, validate_files=args.run)
+                        benchmark=args.benchmark, validate_files=args.run, experimental=args.experimental)
     if args.run:
         os.execvpe(argv[0], argv, {**os.environ, **env})
     print(json.dumps({'variant': args.variant, 'rank': args.rank, 'argv': argv, 'environment': env,

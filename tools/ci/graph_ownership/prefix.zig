@@ -68,10 +68,17 @@ fn driver() Driver {
     d.api.cuGetErrorString = errorText;
     return d;
 }
-fn callRound(g: *Graphs, e: *const Engine) !void {
+fn make(comptime T: type, gpa: std.mem.Allocator, cap: usize) T {
+    if (@typeInfo(@TypeOf(T.init)).@"fn".param_types.len == 2) return T.init(gpa, cap);
+    return T.init(gpa);
+}
+fn callRoundAt(g: *Graphs, e: *const Engine, stretch_index: u32) !void {
     var rd: Round = .{};
     var cy: Carry = .{ .h = 1, .spare = 2, .pre = 3, .pre_f = 4 };
-    return g.run(.{ .rows = 1, .bucket = 1024, .stretch = 0 }, e, &rd, &.{}, &.{}, &.{}, &cy, 0, 0);
+    return g.run(.{ .rows = 1, .bucket = 1024, .stretch = stretch_index }, e, &rd, &.{}, &.{}, &.{}, &cy, 0, 0);
+}
+fn callRound(g: *Graphs, e: *const Engine) !void {
+    return callRoundAt(g, e, 0);
 }
 fn callPass(g: *PassGraphs, e: *const Engine) !void {
     var dr: Drafter = .{};
